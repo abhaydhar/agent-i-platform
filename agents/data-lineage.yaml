@@ -1,0 +1,57 @@
+name: Data Lineage Analyzer
+description: >
+  Trace data flow across C#, Python, and PL/SQL code. Produces a detailed
+  lineage report plus an optional Mermaid diagram.
+icon: lineage
+capability: Multi-stack data lineage tracing
+skills:
+  - name: data-lineage
+    version: 1.1.0
+  - name: code-analysis
+    version: 1.0.0
+mcps:
+  - name: filesystem
+    base_path: ${FS_SANDBOX_ROOT:-./}
+  - name: neo4j
+    uri: ${NEO4J_URI:-}
+input_params:
+  - name: file_paths
+    label: File Paths
+    type: paths
+    required: true
+    placeholder: src/, /data/code, **/*.cs
+    description: One path or glob per line. Paths are resolved relative to FS_SANDBOX_ROOT.
+  - name: target_fields
+    label: Target Fields
+    type: string
+    required: true
+    placeholder: CUSTOMER_ID, ORDER_DATE
+    description: Comma-separated field/column names to trace.
+  - name: trace_depth
+    label: Trace Depth
+    type: number
+    required: false
+    default: 3
+    min: 1
+    max: 10
+    step: 1
+  - name: include_diagram
+    label: Include Mermaid diagram
+    type: boolean
+    required: false
+    default: false
+  - name: tech_stack
+    label: Tech Stack
+    type: multiselect
+    required: false
+    default: [csharp, python, plsql]
+    options:
+      - { label: "C#", value: csharp }
+      - { label: "Python", value: python }
+      - { label: "PL/SQL", value: plsql }
+      - { label: "TypeScript", value: typescript }
+system_prompt: |
+  You are a data lineage expert. Use the filesystem MCP to read files and the
+  Neo4j MCP (if configured) to enrich lineage. Produce a markdown report with:
+  Executive Summary, Table Dependency Matrix, Detailed Lineage per field,
+  Potential Issues, and an optional Mermaid diagram when include_diagram is true.
