@@ -87,6 +87,7 @@ export async function buildMockRun(req: RunRequest): Promise<MockResult> {
       const files = await FilesystemMCP.listFiles({
         extensions: ['cs', 'py', 'sql', 'pls', 'ts'],
         maxFiles: 10,
+        sandboxRoot: req.fsSandboxRoot,
       });
       if (files.length > 0) {
         fileList =

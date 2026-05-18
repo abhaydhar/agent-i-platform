@@ -85,8 +85,8 @@ export function Chat() {
         </span>
       </nav>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)]">
-        <section className="card overflow-hidden">
+      <div className="grid min-h-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)]">
+        <section className="card flex h-[min(85vh,58rem)] min-h-[20rem] flex-col">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
             <div>
               <h1 className="text-base font-semibold text-slate-900">
@@ -120,17 +120,19 @@ export function Chat() {
               </select>
             </div>
           </header>
-          <ChatWindow
-            messages={allMessages}
-            pending={sendMutation.isLoading}
-            onSend={(c) => sendMutation.mutate(c)}
-            disabled={!session.agentId}
-            placeholder={
-              session.agentId
-                ? 'Ask a follow-up about the prior output...'
-                : 'Select an agent first'
-            }
-          />
+          <div className="flex min-h-0 flex-1 flex-col">
+            <ChatWindow
+              messages={allMessages}
+              pending={sendMutation.isLoading}
+              onSend={(c) => sendMutation.mutate(c)}
+              disabled={!session.agentId}
+              placeholder={
+                session.agentId
+                  ? 'Ask a follow-up about the prior output...'
+                  : 'Select an agent first'
+              }
+            />
+          </div>
         </section>
 
         <aside className="space-y-4">

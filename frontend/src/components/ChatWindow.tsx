@@ -55,10 +55,10 @@ export function ChatWindow({
   }
 
   return (
-    <div className="flex h-full min-h-[420px] flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <div
         ref={scrollRef}
-        className="flex-1 space-y-4 overflow-y-auto px-4 py-4"
+        className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4"
       >
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-center text-sm text-slate-400">
@@ -76,8 +76,8 @@ export function ChatWindow({
         ) : null}
       </div>
 
-      <div className="border-t border-slate-200 bg-white p-3">
-        <div className="flex items-end gap-2">
+      <div className="shrink-0 border-t border-slate-200 bg-white p-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -85,13 +85,14 @@ export function ChatWindow({
             rows={2}
             placeholder={placeholder}
             disabled={disabled || pending}
-            className="field-input flex-1 resize-none"
+            className="field-input min-h-[3rem] max-h-40 flex-1 resize-y sm:min-h-[2.75rem]"
           />
           <button
             type="button"
-            className="btn-primary"
+            className="btn-primary h-11 shrink-0 px-5 sm:h-10 sm:self-end"
             disabled={disabled || pending || !draft.trim()}
             onClick={submit}
+            aria-label="Send message"
           >
             Send
           </button>

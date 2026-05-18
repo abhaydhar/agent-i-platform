@@ -6,11 +6,11 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "npx tsx watch src/index.ts",
     "build": "tsc --noEmit",
-    "start": "tsx src/index.ts",
-    "migrate": "tsx src/db/migrate.ts",
-    "seed": "tsx src/scripts/seed-agents.ts",
+    "start": "npx tsx src/index.ts",
+    "migrate": "npx tsx src/db/migrate.ts",
+    "seed": "npx tsx src/scripts/seed-agents.ts",
     "lint": "eslint src",
     "type-check": "tsc --noEmit"
   },
@@ -23,6 +23,7 @@
     "js-yaml": "^4.1.0",
     "markdown-it": "^14.0.0",
     "neo4j-driver": "^5.28.3",
+    "node-sql-parser": "^5.4.0",
     "pg": "^8.11.3",
     "uuid": "^9.0.1"
   },

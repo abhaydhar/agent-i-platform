@@ -4,15 +4,13 @@ import { env } from '../../config/env';
 
 const DEFAULT_EXTENSIONS = ['.cs', '.py', '.sql', '.pls', '.ts', '.js'];
 
-function resolveSafe(p: string): string {
-  const abs = isAbsolute(p) ? p : resolve(env.fsSandboxRoot, p);
-  const rel = relative(env.fsSandboxRoot, abs);
-  if (rel.startsWith('..') || rel === '' || rel.startsWith(`..${sep}`)) {
-    if (rel !== '') {
-      throw new Error(
-        `Path '${p}' escapes the sandbox root '${env.fsSandboxRoot}'`
-      );
-    }
+function resolveSafe(p: string, sandboxRoot: string): string {
+  const abs = isAbsolute(p) ? resolve(p) : resolve(sandboxRoot, p);
+  const rel = relative(sandboxRoot, abs);
+  if (rel.startsWith('..') || rel.startsWith(`..${sep}`)) {
+    throw new Error(
+      `Path '${p}' escapes the sandbox root '${sandboxRoot}'`
+    );
   }
   return abs;
 }
@@ -24,13 +22,27 @@ export interface FileEntry {
   truncated?: boolean;
 }
 
+export interface ListFilesOpts {
+  directory?: string;
+  extensions?: string[];
+  maxFiles?: number;
+  recursive?: boolean;
+  /** When set, restrictions and path resolution use this root instead of FS_SANDBOX_ROOT. */
+  sandboxRoot?: string;
+}
+
 export const FilesystemMCP = {
-  rootPath(): string {
-    return env.fsSandboxRoot;
+  effectiveRoot(sandboxRoot?: string): string {
+    return sandboxRoot ?? resolve(env.fsSandboxRoot);
   },
 
-  async readFile(path: string): Promise<FileEntry> {
-    const abs = resolveSafe(path);
+  rootPath(sandboxRoot?: string): string {
+    return this.effectiveRoot(sandboxRoot);
+  },
+
+  async readFile(path: string, sandboxRoot?: string): Promise<FileEntry> {
+    const root = this.effectiveRoot(sandboxRoot);
+    const abs = resolveSafe(path, root);
     const info = await stat(abs);
     if (!info.isFile()) {
       throw new Error(`Not a file: ${path}`);
@@ -39,20 +51,16 @@ export const FilesystemMCP = {
     const buf = await readFile(abs, 'utf8');
     const content = isLarge ? buf.slice(0, env.maxFileBytes) : buf;
     return {
-      path: relative(env.fsSandboxRoot, abs) || abs,
+      path: relative(root, abs) || abs,
       bytes: info.size,
       preview: content,
       truncated: isLarge,
     };
   },
 
-  async listFiles(opts: {
-    directory?: string;
-    extensions?: string[];
-    maxFiles?: number;
-    recursive?: boolean;
-  } = {}): Promise<FileEntry[]> {
-    const dir = opts.directory ? resolveSafe(opts.directory) : env.fsSandboxRoot;
+  async listFiles(opts: ListFilesOpts = {}): Promise<FileEntry[]> {
+    const root = this.effectiveRoot(opts.sandboxRoot);
+    const dir = opts.directory ? resolveSafe(opts.directory, root) : root;
     const exts = (opts.extensions ?? DEFAULT_EXTENSIONS).map((e) =>
       e.startsWith('.') ? e.toLowerCase() : `.${e.toLowerCase()}`
     );
@@ -82,7 +90,7 @@ export const FilesystemMCP = {
         try {
           const info = await stat(full);
           out.push({
-            path: relative(env.fsSandboxRoot, full) || full,
+            path: relative(root, full) || full,
             bytes: info.size,
           });
         } catch {

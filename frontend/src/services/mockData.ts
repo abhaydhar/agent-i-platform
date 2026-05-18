@@ -12,12 +12,22 @@ export const MOCK_AGENTS: Agent[] = [
     active: true,
     input_params: [
       {
+        name: 'repo_root',
+        label: 'Repository root',
+        type: 'string',
+        required: false,
+        placeholder: 'C:\\path\\to\\your\\repo',
+        description:
+          'Absolute path to the codebase. File paths are resolved under this folder.',
+      },
+      {
         name: 'file_paths',
         label: 'File Paths',
         type: 'paths',
         required: true,
-        placeholder: '/data/code/*.cs, /data/sql/*.sql',
-        description: 'One path or glob per line. Supports .cs, .py, .sql, .pls files.',
+        placeholder: '**/*.cs, src/**/*.py',
+        description:
+          'One path or glob per line, relative to Repository root (or absolute under it).',
       },
       {
         name: 'target_fields',
@@ -57,6 +67,15 @@ export const MOCK_AGENTS: Agent[] = [
           { label: 'Python', value: 'python' },
           { label: 'PL/SQL', value: 'plsql' },
         ],
+      },
+      {
+        name: 'neo4j_run_id',
+        label: 'Neo4j Run ID',
+        type: 'number',
+        required: true,
+        placeholder: 'e.g., 3426',
+        description:
+          'The Neo4j parse run ID to query (REQUIRED). All Neo4j nodes will be filtered by WHERE n.run_id = <this_value>.',
       },
     ],
   },

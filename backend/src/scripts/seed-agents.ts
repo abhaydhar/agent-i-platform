@@ -4,6 +4,8 @@ import { SkillModel } from '../models/Skill';
 import { DATA_LINEAGE_AGENT } from '../services/agents/dataLineage';
 import { env } from '../config/env';
 import { createLogger } from '../utils/logger';
+import { DATA_FLOW_EXPLORER_AGENT } from
+  '../services/agents/dataFlowExplorer';
 
 const log = createLogger('seed');
 
@@ -51,7 +53,7 @@ const CODE_ANALYZER_AGENT = {
       label: 'Repository Path',
       type: 'string' as const,
       required: true,
-      placeholder: 'src/',
+      placeholder: 'C:\\path\\to\\repo or src/ relative to FS_SANDBOX_ROOT',
     },
     {
       name: 'language',
@@ -77,26 +79,42 @@ const CODE_ANALYZER_AGENT = {
 };
 
 async function main() {
+  console.log('=== Starting seed script ===');
+  console.log('DATABASE_URL:', env.databaseUrl ? 'configured' : 'NOT SET');
+
   if (!env.databaseUrl) {
+    console.error('ERROR: DATABASE_URL not set');
     log.error('DATABASE_URL not set');
     process.exit(1);
   }
+
+  console.log('Checking database connection...');
   const ok = await db.isAvailable();
   if (!ok) {
+    console.error('ERROR: database not reachable');
     log.error('database not reachable');
     process.exit(1);
   }
+  console.log('✓ Database connected');
 
+  console.log('\nSeeding skills...');
   for (const skill of SKILLS) {
     const s = await SkillModel.upsertByName(skill);
+    console.log(`✓ skill   ${s.name} (id=${s.id})`);
     log.info(`skill   ${s.name} (id=${s.id})`);
   }
 
-  for (const agent of [DATA_LINEAGE_AGENT, CODE_ANALYZER_AGENT]) {
+  console.log('\nSeeding agents...');
+  for (const agent of [DATA_LINEAGE_AGENT,
+  DATA_FLOW_EXPLORER_AGENT]) {
+    console.log(`  Processing agent: ${agent.name}`);
+    console.log(`  Input params count: ${agent.input_params.length}`);
     const a = await AgentModel.upsertByName(agent);
+    console.log(`✓ agent   ${a.name} (id=${a.id})`);
     log.info(`agent   ${a.name} (id=${a.id})`);
   }
 
+  console.log('\n=== Seed complete ===');
   log.info('seed complete');
   await db.close();
 }

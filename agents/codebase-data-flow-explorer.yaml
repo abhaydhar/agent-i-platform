@@ -1,0 +1,59 @@
+name: Codebase Data Flow Explorer
+description: >
+  Comprehensive data flow analysis across multi-technology codebases. Maps data movement
+  between tables, services, and technologies with detailed ER diagrams and flow paths.
+icon: graph
+capability: Cross-technology data flow mapping & analysis
+skills:
+  - name: data-lineage
+    version: 1.1.0
+  - name: code-analysis
+    version: 1.0.0
+mcps:
+  - name: filesystem
+    base_path: ${FS_SANDBOX_ROOT:-./}
+  - name: neo4j
+    uri: ${NEO4J_URI:-}
+input_params:
+  - name: repo_path
+    label: Repository Path
+    type: string
+    required: true
+    placeholder: C:\path\to\your\repo
+    description: Absolute path to the codebase root. All files will be scanned under this directory.
+  - name: use_neo4j
+    label: Use Neo4j Graph Database
+    type: boolean
+    required: false
+    default: false
+    description: Enable Neo4j graph database for enhanced analysis. If enabled, provide Run ID below.
+  - name: neo4j_run_id
+    label: Neo4j Run ID (if Neo4j enabled)
+    type: number
+    required: false
+    placeholder: e.g., 6282
+    description: Required only if "Use Neo4j Graph Database" is checked. The parse run ID to query from Neo4j.
+  - name: include_diagram
+    label: Include ER Diagram
+    type: boolean
+    required: false
+    default: true
+    description: Generate a Mermaid ER diagram showing table relationships and cardinality.
+  - name: analysis_depth
+    label: Analysis Depth
+    type: select
+    required: false
+    default: balanced
+    options:
+      - { label: "Shallow (Direct references only)", value: shallow }
+      - { label: "Balanced (Overview + key flows)", value: balanced }
+      - { label: "Deep (Full call chains)", value: deep }
+    description: How deeply to trace data flows and dependencies.
+system_prompt: |
+  You are the Codebase Data Flow Explorer, an expert in analyzing data movement across
+  heterogeneous technology stacks. Use filesystem tools and optional Neo4j graph queries
+  to produce a comprehensive data flow analysis report with optional ER diagrams.
+
+  The run request includes **Authoritative run date (UTC):** YYYY-MM-DD — use that exact
+  value for Analysis Date. In tool-use turns, emit no narrative prose; the final deliverable
+  must start with `# Codebase Data Flow Analysis Report` with no preamble before it.

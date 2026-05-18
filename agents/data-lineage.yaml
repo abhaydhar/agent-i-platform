@@ -15,12 +15,18 @@ mcps:
   - name: neo4j
     uri: ${NEO4J_URI:-}
 input_params:
+  - name: repo_root
+    label: Repository root
+    type: string
+    required: false
+    placeholder: C:\path\to\your\repo
+    description: Absolute path to the codebase root. File paths are resolved under this folder. If empty, uses FS_SANDBOX_ROOT or infers from absolute paths in File paths.
   - name: file_paths
     label: File Paths
     type: paths
     required: true
-    placeholder: src/, /data/code, **/*.cs
-    description: One path or glob per line. Paths are resolved relative to FS_SANDBOX_ROOT.
+    placeholder: '**/*.cs, src/**/*.py'
+    description: One path or glob per line, relative to Repository root (or absolute inside that tree).
   - name: target_fields
     label: Target Fields
     type: string
@@ -50,8 +56,19 @@ input_params:
       - { label: "Python", value: python }
       - { label: "PL/SQL", value: plsql }
       - { label: "TypeScript", value: typescript }
+  - name: neo4j_run_id
+    label: Neo4j Run ID
+    type: number
+    required: true
+    placeholder: e.g., 3426
+    description: The Neo4j parse run ID to query (REQUIRED). All Neo4j nodes will be filtered by WHERE n.run_id = <this_value>. To discover available run_ids, query Neo4j directly or check your data ingestion logs.
 system_prompt: |
   You are a data lineage expert. Use the filesystem MCP to read files and the
   Neo4j MCP (if configured) to enrich lineage. Produce a markdown report with:
   Executive Summary, Table Dependency Matrix, Detailed Lineage per field,
   Potential Issues, and an optional Mermaid diagram when include_diagram is true.
+
+  The run request includes **Authoritative run date (UTC):** YYYY-MM-DD — use that
+  exact value for Analysis Date (never guess another year). In tool-use turns,
+  emit no narrative prose; the final deliverable must start with
+  `# Data Lineage Analysis Report` with no preamble before it.

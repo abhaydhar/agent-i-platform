@@ -1,8 +1,10 @@
+import { resolve } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { claudeAuthMode, env } from '../config/env';
 import { MCPManager, type ToolHandler } from './MCPManager';
 import { buildMockRun } from './mockAgent';
 import { createLogger } from '../utils/logger';
+import { computeRunFsRoot } from '../utils/runFsRoot';
 import type { AgentRow } from '../models/types';
 
 const log = createLogger('executor');
@@ -28,6 +30,8 @@ export interface RunRequest {
   inputs: Record<string, unknown>;
   priorMarkdown?: string;
   userMessage?: string;
+  /** Effective FS sandbox root for this run; set by AgentExecutor.run */
+  fsSandboxRoot?: string;
 }
 
 export interface ToolCallTrace {
@@ -110,7 +114,12 @@ function extractMermaid(markdown: string): string | null {
   return m?.[1]?.trim() ?? null;
 }
 
+function authoritativeRunDateUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function buildInitialUserMessage(req: RunRequest): string {
+  const dateLine = `**Authoritative run date (UTC):** ${authoritativeRunDateUtc()}`;
   const lines: string[] = [];
   if (req.userMessage) {
     lines.push(req.userMessage);
@@ -118,10 +127,22 @@ function buildInitialUserMessage(req: RunRequest): string {
       lines.push('', 'Prior agent output (for context):', '');
       lines.push(req.priorMarkdown);
     }
+    lines.push('', dateLine);
   } else {
     lines.push(`Please run the **${req.agent.name}** agent with these inputs:`);
     lines.push('');
     lines.push(renderInputs(req.inputs));
+    const root = req.fsSandboxRoot
+      ? resolve(req.fsSandboxRoot)
+      : resolve(env.fsSandboxRoot);
+    if (root !== resolve(env.fsSandboxRoot)) {
+      lines.push('');
+      lines.push(
+        `**Filesystem root for tools:** \`${root}\` (all list_files / read_file paths are resolved under this directory).`
+      );
+    }
+    lines.push('');
+    lines.push(dateLine);
     lines.push('');
     lines.push(
       'Produce a complete, well-structured markdown report. If the agent supports a Mermaid diagram and the inputs request one, include it in a ```mermaid fenced block.'
@@ -190,7 +211,6 @@ async function runWithClaude(
   const trace: IterationTrace[] = [];
   let totalTokens = 0;
   let totalToolCalls = 0;
-  let allAssistantText = '';
   let lastStopReason = '';
 
   const messages: AnthropicMessage[] = [
@@ -247,11 +267,6 @@ async function runWithClaude(
       .map((c) => c.text)
       .join('\n\n')
       .trim();
-    if (iterText) {
-      allAssistantText = allAssistantText
-        ? `${allAssistantText}\n\n${iterText}`
-        : iterText;
-    }
 
     messages.push({ role: 'assistant', content: assistantContent });
 
@@ -274,7 +289,7 @@ async function runWithClaude(
       iterTrace.elapsedMs = Date.now() - iterStart;
       trace.push(iterTrace);
       return finalize({
-        finalText: allAssistantText,
+        finalText: iterText,
         trace,
         totalTokens,
         totalToolCalls,
@@ -295,7 +310,7 @@ async function runWithClaude(
       const res = await MCPManager.runTool(
         block.name,
         (block.input as Record<string, unknown>) ?? {},
-        { sessionId: req.sessionId }
+        { sessionId: req.sessionId, fsSandboxRoot: req.fsSandboxRoot }
       );
 
       const tcMs = Date.now() - tcStart;
@@ -349,6 +364,7 @@ async function runWithClaude(
     ],
   });
 
+  let forceConcludeText = '';
   try {
     const final = await client.messages.create({
       model: env.anthropicModel,
@@ -366,11 +382,7 @@ async function runWithClaude(
       .map((b) => b.text ?? '')
       .join('\n\n')
       .trim();
-    if (finalText) {
-      allAssistantText = allAssistantText
-        ? `${allAssistantText}\n\n${finalText}`
-        : finalText;
-    }
+    forceConcludeText = finalText;
     trace.push({
       iter: env.maxAgentIterations,
       stopReason: final.stop_reason ?? null,
@@ -390,7 +402,7 @@ async function runWithClaude(
 
   return finalize({
     finalText:
-      allAssistantText ||
+      forceConcludeText ||
       '_Agent exited without producing any text. Check the run trace below to see which tools were called and what they returned._',
     trace,
     totalTokens,
@@ -445,13 +457,38 @@ export const AgentExecutor = {
   async run(req: RunRequest): Promise<RunResult> {
     const tools = MCPManager.toolsForSkills(req.agent.skills);
 
+    let fsSandboxRoot: string;
+    try {
+      fsSandboxRoot = computeRunFsRoot(req.inputs);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(`invalid fs root: ${msg}`);
+      return {
+        markdown:
+          `**Invalid repository path:** ${msg}\n\n` +
+          'Set **Repository root** (Data Lineage) or **Repository Path** (Code Analyzer) to a folder the backend can read, or put an absolute path in **File paths** so the run root can be inferred. Optional: widen `FS_SANDBOX_ROOT` or set `FS_ALLOWED_ROOT` in `backend/.env`.',
+        mermaid: null,
+        metadata: {
+          executionMs: 0,
+          tokensUsed: 0,
+          toolCalls: 0,
+          iterations: 0,
+          stopReason: 'invalid_fs_root',
+          model: env.anthropicModel,
+          mocked: false,
+        },
+      };
+    }
+
+    const runReq: RunRequest = { ...req, fsSandboxRoot };
+
     if (claudeAuthMode === 'none') {
       log.warn(
         'No Anthropic credentials configured — returning mock result. ' +
           'Set ANTHROPIC_API_KEY, or ANTHROPIC_AUTH_TOKEN (+ ANTHROPIC_BASE_URL for proxies like Databricks).'
       );
       const t0 = Date.now();
-      const { markdown, mermaid } = await buildMockRun(req);
+      const { markdown, mermaid } = await buildMockRun(runReq);
       return {
         markdown,
         mermaid,
@@ -468,11 +505,11 @@ export const AgentExecutor = {
     }
 
     try {
-      return await runWithClaude(req, tools);
+      return await runWithClaude(runReq, tools);
     } catch (err) {
       log.error('claude call failed', err);
       const t0 = Date.now();
-      const { markdown, mermaid } = await buildMockRun(req);
+      const { markdown, mermaid } = await buildMockRun(runReq);
       return {
         markdown:
           `> **Note:** Claude call failed (${

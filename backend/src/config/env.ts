@@ -42,7 +42,9 @@ export const env = {
   neo4jPassword: readString('NEO4J_PASSWORD'),
   debug: readString('DEBUG'),
   fsSandboxRoot: readString('FS_SANDBOX_ROOT') ?? process.cwd(),
-  maxAgentIterations: readInt('MAX_AGENT_ITERATIONS', 12),
+  /** If set, repo_root / repo_path / inferred paths must stay inside this directory. */
+  fsAllowedRoot: readString('FS_ALLOWED_ROOT'),
+  maxAgentIterations: readInt('MAX_AGENT_ITERATIONS', 40),
   maxAgentTokensPerCall: readInt('MAX_AGENT_TOKENS_PER_CALL', 8192),
   maxFileBytes: readInt('MAX_FILE_BYTES', 200_000),
   maxFilesPerRun: readInt('MAX_FILES_PER_RUN', 25),

@@ -80,7 +80,17 @@ export const Neo4jMCP = {
     if (!d) throw new Error('Neo4j not configured');
     const session = d.session();
     try {
-      const result = await session.run(cypher, params);
+      // Convert numeric parameters to Neo4j integers
+      const convertedParams: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(params)) {
+        if (typeof value === 'number' && Number.isInteger(value)) {
+          convertedParams[key] = neo4j.int(value);
+        } else {
+          convertedParams[key] = value;
+        }
+      }
+
+      const result = await session.run(cypher, convertedParams);
       const records = result.records.map((r) => {
         const obj: Record<string, unknown> = {};
         for (const k of r.keys) {

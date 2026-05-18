@@ -12,13 +12,30 @@ import { MOCK_AGENTS, buildMockRunResponse } from './mockData';
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || '';
 
+/** Default for typical API calls. Agent run / chat follow-up can take several minutes. */
+const DEFAULT_TIMEOUT_MS = 120_000;
+
+/** Long-running Claude + tools; override with VITE_AGENT_RUN_TIMEOUT_MS (milliseconds). */
+const AGENT_RUN_TIMEOUT_MS =
+  Number(import.meta.env.VITE_AGENT_RUN_TIMEOUT_MS) > 0
+    ? Number(import.meta.env.VITE_AGENT_RUN_TIMEOUT_MS)
+    : 900_000;
+
 const http = axios.create({
   baseURL: API_URL ? `${API_URL}/api` : '/api',
-  timeout: 120_000,
+  timeout: DEFAULT_TIMEOUT_MS,
 });
+
+function isTimeoutError(err: unknown): boolean {
+  if (!(err instanceof AxiosError)) return false;
+  if (err.code === 'ECONNABORTED') return true;
+  const msg = (err.message ?? '').toLowerCase();
+  return msg.includes('timeout');
+}
 
 function isNetworkOr404(err: unknown): boolean {
   if (!(err instanceof AxiosError)) return false;
+  if (isTimeoutError(err)) return false;
   if (!err.response) return true;
   return err.response.status === 404 || err.response.status >= 500;
 }
@@ -98,10 +115,17 @@ export const api = {
     try {
       const { data } = await http.post<AgentRunResponse>(
         `/agents/${req.agentId}/run`,
-        { inputs: req.inputs }
+        { inputs: req.inputs },
+        { timeout: AGENT_RUN_TIMEOUT_MS }
       );
       return data;
     } catch (err) {
+      if (isTimeoutError(err)) {
+        console.error('[api] agent run timed out waiting for the backend');
+        throw new Error(
+          `Agent run timed out after ${Math.round(AGENT_RUN_TIMEOUT_MS / 1000)}s. The server may still be finishing — check backend logs, or set VITE_AGENT_RUN_TIMEOUT_MS in frontend/.env (milliseconds).`
+        );
+      }
       if (isNetworkOr404(err)) {
         console.warn('[api] backend unavailable, returning mock run result');
         const agent =
@@ -145,10 +169,17 @@ export const api = {
     try {
       const { data } = await http.post<SendMessageResponse>(
         `/conversations/${sessionId}/message`,
-        { content }
+        { content },
+        { timeout: AGENT_RUN_TIMEOUT_MS }
       );
       return data;
     } catch (err) {
+      if (isTimeoutError(err)) {
+        console.error('[api] chat message timed out waiting for the backend');
+        throw new Error(
+          `Chat request timed out after ${Math.round(AGENT_RUN_TIMEOUT_MS / 1000)}s. Set VITE_AGENT_RUN_TIMEOUT_MS if runs regularly take longer.`
+        );
+      }
       if (isNetworkOr404(err)) {
         await delay(600);
         const session = getOrCreateMockSession(sessionId);
