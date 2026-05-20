@@ -333,7 +333,7 @@ export const DATA_LINEAGE_AGENT = {
   icon: 'lineage',
   capability: 'Multi-stack data lineage tracing',
   skills: ['data-lineage', 'code-ast-parse'],
-  active: true,
+  active: false,
   system_prompt: DATA_LINEAGE_SYSTEM_PROMPT,
   input_params: [
     {

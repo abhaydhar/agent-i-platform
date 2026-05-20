@@ -16,7 +16,7 @@ A full-stack web application for running Claude agents that perform specialized 
 
 **Backend**: Node.js 18+ | Express | TypeScript | PostgreSQL  
 **Frontend**: React 18+ | Vite | TypeScript | Tailwind CSS  
-**AI**: Anthropic Claude Agent SDK  
+**AI**: Anthropic Claude (Messages API by default; optional [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) subprocess)  
 **Database**: PostgreSQL 13+  
 **MCPs**: Neo4j MCP | Filesystem MCP
 
@@ -44,13 +44,16 @@ cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 ```
 
-Edit `backend/.env`:
+Edit `backend/.env` (see `backend/.env.example`):
 ```
 ANTHROPIC_API_KEY=sk_your_key_here
 DATABASE_URL=postgresql://aip_user:aip_password@localhost:5432/aip
 NEO4J_URI=neo4j://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=password
+# Optional: AGENT_EXECUTOR_BACKEND=agent-sdk  # default is messages; see agents/README.md
+# Optional: ENABLE_CODE_PARSER_TOOLS=false  # global kill-switch for AST MCP tools
+# Optional: USE_MCP_FILESYSTEM_TOOLS=true   # default false — omit MCP list_files/read_file; use agent-sdk for Read/Glob/Grep
 ```
 
 Edit `frontend/.env`:
