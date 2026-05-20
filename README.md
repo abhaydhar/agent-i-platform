@@ -2,6 +2,17 @@
 
 A full-stack web application for running Claude agents that perform specialized analysis tasks with multi-step workflows, Neo4j knowledge base integration, and downloadable markdown reports.
 
+## What makes AIP "agentic"
+
+A normal LLM app answers in one shot. AIP is **agentic** because each agent is given a goal and a toolbox, and Claude itself decides which tool to call, looks at the result, and chooses the next step — in a loop — until it decides it is done. Concretely:
+
+1. **Declarative goals, not scripts.** Each agent is defined in YAML (`agents/*.yaml`) with a system prompt, skills, and input parameters. The backend never hard-codes the order of steps.
+2. **Real tools via MCPs.** Skills map to MCP tools (`list_files`, `read_file`, `neo4j_query`, code parsers) that read your filesystem and Neo4j graph.
+3. **Autonomous reason → act → observe loop.** `backend/src/services/AgentExecutor.ts` calls the model with `tools`, runs whichever tool the model chose, feeds the result back as a `tool_result`, and repeats until `stop_reason !== 'tool_use'`. The model controls termination, not the code.
+4. **Guardrails around autonomy.** A per-run filesystem sandbox root, a max-iterations ceiling with a forced-conclude turn, tool-result size clamping, and a full per-iteration trace surfaced in the report.
+
+> **Note on the SDK.** Despite the name, this project does **not** use `@anthropic-ai/claude-agent-sdk`. It uses the base `@anthropic-ai/sdk` (Messages API) and implements the agent loop directly in `AgentExecutor.ts`. The "agentic" behavior is a property of that loop and the MCP tool layer, not of a library label.
+
 ## Features
 
 - **Agent Selection & Execution**: Run pre-configured or custom agents with dynamic input forms
@@ -16,9 +27,13 @@ A full-stack web application for running Claude agents that perform specialized 
 
 **Backend**: Node.js 18+ | Express | TypeScript | PostgreSQL  
 **Frontend**: React 18+ | Vite | TypeScript | Tailwind CSS  
+<<<<<<< HEAD
 **AI**: Anthropic Claude (Messages API by default; optional [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) subprocess)  
+=======
+**AI**: Anthropic Claude (Messages API via `@anthropic-ai/sdk`) with a custom in-house agent loop (`backend/src/services/AgentExecutor.ts`)  
+>>>>>>> 4f3de1763e161e54e149c9b150aa711d234f0b20
 **Database**: PostgreSQL 13+  
-**MCPs**: Neo4j MCP | Filesystem MCP
+**MCPs**: Neo4j MCP | Filesystem MCP | Code Parser MCP
 
 ## Prerequisites
 
