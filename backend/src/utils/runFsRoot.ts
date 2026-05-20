@@ -46,7 +46,7 @@ function inferFromFilePaths(fp: unknown): string | null {
 }
 
 /**
- * Effective filesystem sandbox for this agent run (list_files, read_file, code-parser tools).
+ * Effective filesystem sandbox for this agent run (list_files, read_file, optional code-parser tools).
  */
 export function computeRunFsRoot(inputs: Record<string, unknown>): string {
   const defaultRoot = resolve(env.fsSandboxRoot);

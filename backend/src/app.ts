@@ -5,6 +5,7 @@ import { agentsRouter } from './routes/agents';
 import { skillsRouter } from './routes/skills';
 import { conversationsRouter } from './routes/conversations';
 import { settingsRouter } from './routes/settings';
+import { statsRouter } from './routes/stats';
 import { errorHandler, notFound } from './utils/http';
 import { db } from './db/connection';
 
@@ -27,6 +28,7 @@ export function createApp() {
   app.use('/api/skills', skillsRouter);
   app.use('/api/conversations', conversationsRouter);
   app.use('/api/settings', settingsRouter);
+  app.use('/api/stats', statsRouter);
 
   app.use(notFound);
   app.use(errorHandler);

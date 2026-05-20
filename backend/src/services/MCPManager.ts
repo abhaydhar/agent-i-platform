@@ -1,3 +1,4 @@
+import { env } from '../config/env';
 import { FilesystemMCP } from './mcps/filesystem';
 import { Neo4jMCP } from './mcps/neo4j';
 import { Neo4jMCPEnhanced } from './mcps/neo4j-enhanced';
@@ -41,7 +42,22 @@ function fail(error: unknown): ToolResult {
     error: error instanceof Error ? error.message : String(error),
   };
 }
+const toolCache = new Map<string, { result: ToolResult; timestamp: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+function getCacheKey(name: string, args: Record<string, unknown>, sessionId?: string): string {
+  const cacheable = [
+    'read_file',
+    'list_files',
+    'neo4j_find_field_lineage',
+    'neo4j_get_stats',
+    'neo4j_list_execution_flows',
+    'neo4j_get_entity_usage_spread',
+    'neo4j_search_snippets',
+  ];
+  if (!cacheable.includes(name)) return '';
+  return `${sessionId}:${name}:${JSON.stringify(args)}`;
+}
 export const TOOL_HANDLERS: Record<string, ToolHandler> = {
   list_files: {
     def: {
@@ -994,8 +1010,20 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
   },
 };
 
+export interface ToolsForSkillsOptions {
+  /**
+   * When false, omit AST/code-parser tools even if the agent has the `code-ast-parse` skill.
+   * Driven by ENABLE_CODE_PARSER_TOOLS.
+   */
+  includeCodeParserTools?: boolean;
+}
+
+function wantsAstParserTools(skills: string[]): boolean {
+  return skills.includes('code-ast-parse');
+}
+
 export const MCPManager = {
-  toolsForSkills(skills: string[]): ToolHandler[] {
+  toolsForSkills(skills: string[], options?: ToolsForSkillsOptions): ToolHandler[] {
     const out: ToolHandler[] = [];
     const wantsFs =
       skills.includes('data-lineage') ||
@@ -1004,9 +1032,10 @@ export const MCPManager = {
     const wantsNeo =
       skills.includes('data-lineage') || skills.includes('neo4j');
     const wantsCodeParsing =
-      skills.includes('data-lineage') || skills.includes('code-analysis');
+      wantsAstParserTools(skills) &&
+      (options?.includeCodeParserTools !== false);
 
-    if (wantsFs) {
+    if (wantsFs && env.useMcpFilesystemTools) {
       out.push(TOOL_HANDLERS.list_files, TOOL_HANDLERS.read_file);
     }
     if (wantsNeo) {
@@ -1053,8 +1082,25 @@ export const MCPManager = {
     args: Record<string, unknown>,
     ctx: ToolCallContext
   ): Promise<ToolResult> {
+    // Check cache
+    const cacheKey = getCacheKey(name, args, ctx.sessionId);
+    if (cacheKey) {
+      const cached = toolCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+        return cached.result;
+      }
+    }
+
     const handler = TOOL_HANDLERS[name];
     if (!handler) return fail(`Unknown tool '${name}'`);
-    return handler.run(args, ctx);
+
+    const result = await handler.run(args, ctx);
+
+    // Cache successful results
+    if (cacheKey && result.ok) {
+      toolCache.set(cacheKey, { result, timestamp: Date.now() });
+    }
+
+    return result;
   },
 };

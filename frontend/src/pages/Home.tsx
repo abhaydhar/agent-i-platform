@@ -28,7 +28,7 @@ export function Home() {
     <div>
       <section className="mb-8">
         <h1 className="text-2xl font-semibold text-slate-900">
-          Run a Claude-powered agent
+          Run a agent
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-600">
           Pick an agent, give it inputs, and get a structured markdown report

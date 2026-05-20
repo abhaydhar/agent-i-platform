@@ -1,15 +1,21 @@
+import { useCallback, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from 'react-query';
 
 import { AgentForm } from '@/components/AgentForm';
 import { AgentIcon } from '@/components/AgentIcon';
+import { AgentProgressDisplay } from '@/components/AgentProgressDisplay';
 import { OutputViewer } from '@/components/OutputViewer';
 import { Spinner } from '@/components/Spinner';
+import { TokenStatsDisplay } from '@/components/TokenStatsDisplay';
 import { api } from '@/services/api';
 import type { AgentRunResponse } from '@/types';
 
 export function AgentRun() {
   const { id } = useParams<{ id: string }>();
+  const [streamSessionId, setStreamSessionId] = useState<string | null>(null);
+  const [streamResult, setStreamResult] = useState<AgentRunResponse | null>(null);
+  const [streamError, setStreamError] = useState<string | null>(null);
 
   const agentQuery = useQuery(
     ['agent', id],
@@ -24,7 +30,53 @@ export function AgentRun() {
   >({
     mutationFn: (inputs) =>
       api.runAgent({ agentId: id as string, inputs }),
+    onMutate: () => {
+      // Clear previous results immediately when mutation starts
+      setStreamResult(null);
+      setStreamError(null);
+    },
+    onSuccess: (data) => {
+      setStreamError(null);
+      if (data.pending) {
+        setStreamSessionId(data.sessionId);
+        setStreamResult(null);
+      } else {
+        setStreamSessionId(null);
+        setStreamResult(data);
+      }
+    },
+    onError: () => {
+      setStreamSessionId(null);
+      setStreamResult(null);
+    },
   });
+
+  const handleSubmit = useCallback(
+    (values: Record<string, unknown>) => {
+      setStreamResult(null);
+      setStreamError(null);
+      setStreamSessionId(null);
+      runMutation.mutate(values);
+    },
+    [runMutation]
+  );
+
+  const handleStreamComplete = useCallback((result: AgentRunResponse) => {
+    setStreamError(null);
+    setStreamResult(result);
+    setStreamSessionId(null);
+  }, []);
+
+  const handleStreamError = useCallback((message: string) => {
+    setStreamError(message);
+    setStreamSessionId(null);
+    runMutation.reset();
+  }, [runMutation]);
+
+  const handleDismissError = useCallback(() => {
+    setStreamError(null);
+    runMutation.reset();
+  }, [runMutation]);
 
   if (agentQuery.isLoading) {
     return (
@@ -51,6 +103,16 @@ export function AgentRun() {
   }
 
   const agent = agentQuery.data;
+  const isPostLoading = runMutation.isLoading;
+  const isStreaming = Boolean(streamSessionId);
+  const formBusy = isPostLoading || isStreaming;
+
+  const showOutput =
+    streamResult &&
+    streamResult.markdown !== undefined &&
+    streamResult.markdown !== '';
+
+  const currentSessionId = streamResult?.sessionId || null;
 
   return (
     <div className="space-y-6">
@@ -99,26 +161,48 @@ export function AgentRun() {
           </h2>
           <AgentForm
             agent={agent}
-            submitting={runMutation.isLoading}
-            onSubmit={(values) => runMutation.mutate(values)}
+            submitting={formBusy}
+            onSubmit={handleSubmit}
           />
         </aside>
 
-        <section className="min-h-[500px]">
-          {runMutation.isLoading ? (
-            <div className="card flex h-full min-h-[500px] flex-col items-center justify-center p-10">
+        <section className="min-h-[500px] space-y-4">
+          {isPostLoading && !isStreaming ? (
+            <div className="card flex h-full min-h-[200px] flex-col items-center justify-center p-8">
               <Spinner size="lg" />
               <p className="mt-4 text-sm font-medium text-slate-700">
-                Running {agent.name}...
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                This may take up to 30 seconds for typical analyses.
+                Starting {agent.name}…
               </p>
             </div>
-          ) : runMutation.isError ? (
+          ) : null}
+
+          <AgentProgressDisplay
+            key={streamSessionId || 'no-session'}
+            sessionId={streamSessionId}
+            onComplete={handleStreamComplete}
+            onError={handleStreamError}
+          />
+
+          {streamError ? (
             <div className="card border border-red-200 bg-red-50/40 p-6">
               <p className="text-sm font-semibold text-red-700">
                 Agent execution failed
+              </p>
+              <p className="mt-1 text-sm text-red-600">{streamError}</p>
+              <button
+                type="button"
+                className="btn-secondary mt-3"
+                onClick={handleDismissError}
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
+
+          {runMutation.isError && !streamError ? (
+            <div className="card border border-red-200 bg-red-50/40 p-6">
+              <p className="text-sm font-semibold text-red-700">
+                Could not start agent run
               </p>
               <p className="mt-1 text-sm text-red-600">
                 {runMutation.error?.message ?? 'Unknown error'}
@@ -131,12 +215,24 @@ export function AgentRun() {
                 Dismiss
               </button>
             </div>
-          ) : runMutation.data ? (
-            <OutputViewer
-              result={runMutation.data}
-              agentName={agent.name}
-            />
-          ) : (
+          ) : null}
+
+          {showOutput && streamResult ? (
+            <>
+              <TokenStatsDisplay sessionId={currentSessionId} />
+              <OutputViewer
+                key={currentSessionId || 'output'}
+                result={streamResult as AgentRunResponse & { markdown: string }}
+                agentName={agent.name}
+              />
+            </>
+          ) : null}
+
+          {!isPostLoading &&
+          !isStreaming &&
+          !showOutput &&
+          !streamError &&
+          !runMutation.isError ? (
             <div className="card flex h-full min-h-[500px] flex-col items-center justify-center p-10 text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-500">
                 <AgentIcon kind={agent.icon} className="h-7 w-7" />
@@ -145,11 +241,12 @@ export function AgentRun() {
                 Ready to run
               </p>
               <p className="mt-1 max-w-sm text-xs text-slate-500">
-                Fill in the inputs on the left and click <b>Run agent</b>. The
-                markdown report will appear here.
+                Fill in the inputs on the left and click <b>Run agent</b>. Live
+                progress appears here while the agent runs; the markdown report
+                shows when finished.
               </p>
             </div>
-          )}
+          ) : null}
         </section>
       </div>
     </div>

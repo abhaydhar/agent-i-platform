@@ -13,6 +13,15 @@ function readInt(name: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function readBool(name: string, fallback: boolean): boolean {
+  const v = process.env[name];
+  if (v === undefined || v === '') return fallback;
+  const lower = v.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(lower)) return true;
+  if (['0', 'false', 'no', 'off'].includes(lower)) return false;
+  return fallback;
+}
+
 const PLACEHOLDER_KEYS = new Set([
   'sk_your_key_here',
   'sk-your-key-here',
@@ -48,6 +57,25 @@ export const env = {
   maxAgentTokensPerCall: readInt('MAX_AGENT_TOKENS_PER_CALL', 8192),
   maxFileBytes: readInt('MAX_FILE_BYTES', 200_000),
   maxFilesPerRun: readInt('MAX_FILES_PER_RUN', 25),
+  /**
+   * Agent loop implementation:
+   * - `messages` (default): in-process Anthropic Messages API + MCPManager tools (works with Databricks proxy, etc.)
+   * - `agent-sdk`: @anthropic-ai/claude-agent-sdk (Claude Code subprocess; requires CLI/native deps; MCP tools as mcp__aip__*)
+   */
+  agentExecutorBackend: readString('AGENT_EXECUTOR_BACKEND', 'messages') ?? 'messages',
+  /** When false, never register AST/code-parser MCP tools even if the agent has the `code-ast-parse` skill. */
+  enableCodeParserTools: readBool('ENABLE_CODE_PARSER_TOOLS', true),
+  /**
+   * Agent SDK only: allow the built-in Bash tool when Neo4j is off (raw-repo mode).
+   * Prefer false; Grep covers most search needs without arbitrary shell.
+   */
+  agentSdkAllowBashWithoutNeo4j: readBool('AGENT_SDK_ALLOW_BASH', false),
+  /**
+   * When false (default), do not register MCP `list_files` / `read_file`. Use Agent SDK built-ins
+   * (Read, Glob, Grep) with AGENT_EXECUTOR_BACKEND=agent-sdk for file access. Set true only for
+   * legacy Messages API runs that rely on sandbox MCP filesystem tools.
+   */
+  useMcpFilesystemTools: readBool('USE_MCP_FILESYSTEM_TOOLS', false),
 };
 
 export const claudeAuthMode: 'api-key' | 'auth-token' | 'none' =

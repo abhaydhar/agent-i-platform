@@ -7,6 +7,8 @@ TOOL-USE OUTPUT DISCIPLINE:
 
 AVAILABLE TOOLS:
 
+**Session note:** By default this deployment does **not** expose MCP \`list_files\` / \`read_file\` (\`USE_MCP_FILESYSTEM_TOOLS=false\`). Use **Agent SDK** (\`AGENT_EXECUTOR_BACKEND=agent-sdk\`) so the model gets built-in **Glob**, **Grep**, and **Read** scoped to the repo root. If \`USE_MCP_FILESYSTEM_TOOLS=true\`, MCP filesystem tools are available on the Messages API path. AST/parser tools (\`parse_code_structure\`, etc.) are only available when the \`code-ast-parse\` skill is enabled and \`ENABLE_CODE_PARSER_TOOLS\` allows it.
+
 **Neo4j Knowledge Graph Tools (PRIMARY - ALWAYS START HERE):**
 - neo4j_get_stats(run_id?) — **OPTIONAL**: Returns availableRunIds list and node statistics. NOT NEEDED when user provides neo4j_run_id - trust their input directly.
 - neo4j_find_field_lineage(field_name, run_id, operation_type?, limit?) — **PRIMARY LINEAGE TOOL**: Complete field lineage DatabaseEntity → Dbcall → Snippet → ExecutionFlow. Shows which code touches fields, operations, and business context.
@@ -330,7 +332,7 @@ export const DATA_LINEAGE_AGENT = {
     'Trace data flow across C#, Python, and PL/SQL code. Produces a detailed lineage report plus an optional Mermaid diagram.',
   icon: 'lineage',
   capability: 'Multi-stack data lineage tracing',
-  skills: ['data-lineage', 'code-analysis'],
+  skills: ['data-lineage', 'code-ast-parse'],
   active: true,
   system_prompt: DATA_LINEAGE_SYSTEM_PROMPT,
   input_params: [
@@ -391,6 +393,15 @@ export const DATA_LINEAGE_AGENT = {
         { label: 'PL/SQL', value: 'plsql' },
         { label: 'TypeScript', value: 'typescript' },
       ],
+    },
+    {
+      name: 'enable_ast_parse',
+      label: 'Enable AST / code-parser tools',
+      type: 'boolean' as const,
+      required: false,
+      default: true,
+      description:
+        'When true (default), use parse_code_structure / batch_parse_files for Neo4j validation. Set false for faster graph-only runs.',
     },
     {
       name: 'neo4j_run_id',

@@ -42,13 +42,20 @@ export interface AgentRunRequest {
 
 export interface AgentRunResponse {
   sessionId: string;
-  markdown: string;
+  /** When true, the run continues in the background; subscribe to SSE for progress and final markdown. */
+  pending?: boolean;
+  markdown?: string;
   mermaid?: string;
-  metadata: {
+  metadata?: {
     executionMs: number;
     tokensUsed?: number;
+    toolCalls?: number;
+    iterations?: number;
     filesAnalyzed?: number;
     model?: string;
+    mocked?: boolean;
+    stopReason?: string;
+    executorBackend?: string;
   };
 }
 
@@ -84,4 +91,23 @@ export interface Neo4jSettings {
   configured: boolean;
   uri?: string;
   user?: string;
+}
+
+export interface TokenStats {
+  totalTokens: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCost: number;
+  totalExecutionMs: number;
+  runCount: number;
+  byModel: Record<
+    string,
+    {
+      tokens: number;
+      inputTokens: number;
+      outputTokens: number;
+      cost: number;
+      runCount: number;
+    }
+  >;
 }

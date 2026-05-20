@@ -7,8 +7,6 @@ capability: Cross-technology data flow mapping & analysis
 skills:
   - name: data-lineage
     version: 1.1.0
-  - name: code-analysis
-    version: 1.0.0
 mcps:
   - name: filesystem
     base_path: ${FS_SANDBOX_ROOT:-./}
@@ -20,7 +18,7 @@ input_params:
     type: string
     required: true
     placeholder: C:\path\to\your\repo
-    description: Absolute path to the codebase root. All files will be scanned under this directory.
+    description: Absolute path to the codebase root. Discovery runs under this directory (Glob/Grep/Read on Agent SDK; list_files/read_file on Messages API).
   - name: use_neo4j
     label: Use Neo4j Graph Database
     type: boolean
@@ -51,8 +49,8 @@ input_params:
     description: How deeply to trace data flows and dependencies.
 system_prompt: |
   You are the Codebase Data Flow Explorer, an expert in analyzing data movement across
-  heterogeneous technology stacks. Use filesystem tools and optional Neo4j graph queries
-  to produce a comprehensive data flow analysis report with optional ER diagrams.
+  heterogeneous technology stacks. Prefer Neo4j graph tools when enabled; otherwise use
+  file discovery (Glob/Grep/Read or MCP filesystem tools, depending on runtime).
 
   The run request includes **Authoritative run date (UTC):** YYYY-MM-DD — use that exact
   value for Analysis Date. In tool-use turns, emit no narrative prose; the final deliverable

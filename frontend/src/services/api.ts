@@ -7,6 +7,7 @@ import type {
   Neo4jSettings,
   SendMessageResponse,
   SessionDetails,
+  TokenStats,
 } from '@/types';
 import { MOCK_AGENTS, buildMockRunResponse } from './mockData';
 
@@ -136,7 +137,7 @@ export const api = {
         const session = getOrCreateMockSession(result.sessionId, agent.id);
         session.inputs = req.inputs;
         session.lastOutput = {
-          markdown: result.markdown,
+          markdown: result.markdown ?? '',
           mermaid: result.mermaid ?? null,
           metadata: result.metadata as unknown as Record<string, unknown>,
         };
@@ -323,6 +324,48 @@ export const api = {
     } catch (err) {
       if (isNetworkOr404(err)) {
         return { ok: false, message: 'Backend unreachable' };
+      }
+      throw err;
+    }
+  },
+
+  async getTokenStats(): Promise<TokenStats> {
+    try {
+      const { data } = await http.get<TokenStats>('/stats/tokens');
+      return data;
+    } catch (err) {
+      if (isNetworkOr404(err)) {
+        return {
+          totalTokens: 0,
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          totalCost: 0,
+          totalExecutionMs: 0,
+          runCount: 0,
+          byModel: {},
+        };
+      }
+      throw err;
+    }
+  },
+
+  async getSessionTokenStats(sessionId: string): Promise<TokenStats> {
+    try {
+      const { data } = await http.get<TokenStats>(
+        `/stats/sessions/${sessionId}/tokens`
+      );
+      return data;
+    } catch (err) {
+      if (isNetworkOr404(err)) {
+        return {
+          totalTokens: 0,
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          totalCost: 0,
+          totalExecutionMs: 0,
+          runCount: 0,
+          byModel: {},
+        };
       }
       throw err;
     }

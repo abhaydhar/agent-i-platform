@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from 'react-query';
 
 import { ChatWindow } from '@/components/ChatWindow';
 import { Spinner } from '@/components/Spinner';
+import { TokenStatsDisplay } from '@/components/TokenStatsDisplay';
 import { api } from '@/services/api';
 import type { Agent, ChatMessage } from '@/types';
 
@@ -136,6 +137,8 @@ export function Chat() {
         </section>
 
         <aside className="space-y-4">
+          <TokenStatsDisplay sessionId={sessionId || null} />
+
           {session.lastOutput ? (
             <div className="card p-4">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">

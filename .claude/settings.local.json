@@ -3,7 +3,21 @@
     "allow": [
       "Bash(node -e \"\nconst fs = require(''fs'');\nconst path = ''C:/Users/2000108444/Documents/agent-i-platform/backend/src/scripts/seed-agents.ts'';\nlet content = fs.readFileSync(path, ''utf8'');\n\n// Add import after DATA_LINEAGE_AGENT\ncontent = content.replace(\n  \"\"import { DATA_LINEAGE_AGENT } from ''../services/agents/dataLineage'';\"\",\n  \"\"import { DATA_LINEAGE_AGENT } from ''../services/agents/dataLineage'';\\nimport { DATA_FLOW_EXPLORER_AGENT } from ''../services/agents/dataFlowExplorer'';\"\"\n);\n\n// Update agent array\ncontent = content.replace(\n  ''[DATA_LINEAGE_AGENT, CODE_ANALYZER_AGENT]'',\n  ''[DATA_LINEAGE_AGENT, DATA_FLOW_EXPLORER_AGENT, CODE_ANALYZER_AGENT]''\n);\n\nfs.writeFileSync(path, content, ''utf8'');\nconsole.log(''SUCCESS: File updated'');\n\")",
       "Bash(node -e \"const fs = require(''fs''); const path = ''backend/src/scripts/seed-agents.ts''; let content = fs.readFileSync(path, ''utf8''); content = content.replace(\"\"import { DATA_LINEAGE_AGENT } from ''../services/agents/dataLineage'';\"\", \"\"import { DATA_LINEAGE_AGENT } from ''../services/agents/dataLineage'';\\nimport { DATA_FLOW_EXPLORER_AGENT } from ''../services/agents/dataFlowExplorer'';\"\"); content = content.replace(''[DATA_LINEAGE_AGENT, CODE_ANALYZER_AGENT]'', ''[DATA_LINEAGE_AGENT, DATA_FLOW_EXPLORER_AGENT, CODE_ANALYZER_AGENT]''); fs.writeFileSync(path, content, ''utf8''); console.log(''File updated successfully'');\")",
-      "Bash(npm run db:seed)"
+      "Bash(npm run db:seed)",
+      "Bash(node optimize-agent-performance.js)",
+      "Bash(node --version)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(node remove-api-from-prompt.js)",
+      "Bash(npm install @anthropic-ai/agents-sdk)",
+      "WebSearch",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(npm install @anthropic-ai/claude-agent-sdk)",
+      "Bash(test -d node_modules/@anthropic-ai/claude-agent-sdk)",
+      "Bash(npm view @anthropic-ai/claude-agent-sdk)",
+      "Bash(npm view @anthropic-ai/claude-agent-sdk versions --json)",
+      "Bash(npm install @anthropic-ai/claude-agent-sdk --legacy-peer-deps)",
+      "Bash(test -d node_modules)",
+      "Bash(cat dataFlowExplorer.ts.backup)"
     ],
     "deny": [],
     "ask": []

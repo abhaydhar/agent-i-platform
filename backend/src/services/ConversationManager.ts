@@ -101,6 +101,14 @@ export const ConversationManager = {
       assistantMessage,
     ]);
 
+    // Save the Q&A chat output to track tokens
+    await OutputModel.create({
+      session_id: opts.sessionId,
+      markdown_content: run.markdown,
+      mermaid_content: run.mermaid,
+      metadata: run.metadata as unknown as Record<string, unknown>,
+    });
+
     const session2 = await ConversationManager.load(opts.sessionId);
     return { session: session2, assistant: assistantMessage, run };
   },

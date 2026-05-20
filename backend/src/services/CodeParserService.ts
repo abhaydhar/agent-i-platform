@@ -153,9 +153,6 @@ export class CodeParserService {
     // Pattern for SQL strings
     const sqlStringPattern = /@?"(SELECT|INSERT|UPDATE|DELETE|MERGE)\s+.*?"/gis;
 
-    // Pattern for Entity Framework operations
-    const efPattern = /(?:FirstOrDefault|SingleOrDefault|ToList|FirstAsync|SingleAsync|ToListAsync)\s*\(/gi;
-
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const lineNumber = i + 1;

@@ -29,6 +29,15 @@ const SKILLS = [
       'Scans files, computes simple metrics (size, fan-out), highlights smells.',
   },
   {
+    name: 'code-ast-parse',
+    description:
+      'In-process AST / structured parsing (parse_code_structure, batch_parse_files, trace_field_in_code, analyze_data_flow).',
+    mcp_integrations: ['filesystem'],
+    version: '1.0.0',
+    skill_definition:
+      'Heavy CPU parsing for structured extraction; opt-in per agent.',
+  },
+  {
     name: 'neo4j',
     description: 'Read-only Cypher querying with natural-language explanation.',
     mcp_integrations: ['neo4j'],
@@ -44,7 +53,7 @@ const CODE_ANALYZER_AGENT = {
     'Static analysis across a codebase: dependency graphs, hot files, complexity hotspots, and architectural smells.',
   icon: 'code',
   capability: 'Static analysis & architecture review',
-  skills: ['code-analysis'],
+  skills: ['code-analysis', 'code-ast-parse'],
   active: true,
   system_prompt: CODE_ANALYZER_PROMPT,
   input_params: [
@@ -105,8 +114,11 @@ async function main() {
   }
 
   console.log('\nSeeding agents...');
-  for (const agent of [DATA_LINEAGE_AGENT,
-  DATA_FLOW_EXPLORER_AGENT]) {
+  for (const agent of [
+    DATA_LINEAGE_AGENT,
+    DATA_FLOW_EXPLORER_AGENT,
+    CODE_ANALYZER_AGENT,
+  ]) {
     console.log(`  Processing agent: ${agent.name}`);
     console.log(`  Input params count: ${agent.input_params.length}`);
     const a = await AgentModel.upsertByName(agent);

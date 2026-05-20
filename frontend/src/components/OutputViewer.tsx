@@ -73,8 +73,11 @@ function markdownToHtmlString(markdown: string): string {
 }
 
 export function OutputViewer({ result, agentName }: OutputViewerProps) {
-  const [mode, setMode] = useState<OutputViewMode>('split');
+  const [mode, setMode] = useState<OutputViewMode>('preview');
   const [copied, setCopied] = useState(false);
+
+  const meta = result.metadata ?? { executionMs: 0 };
+  const markdown = result.markdown ?? '';
 
   const baseFilename = useMemo(
     () => `${slugify(agentName) || 'agent'}-${result.sessionId}`,
@@ -83,7 +86,7 @@ export function OutputViewer({ result, agentName }: OutputViewerProps) {
 
   function handleCopy() {
     navigator.clipboard
-      .writeText(result.markdown)
+      .writeText(markdown)
       .then(() => {
         setCopied(true);
         window.setTimeout(() => setCopied(false), 1500);
@@ -94,11 +97,11 @@ export function OutputViewer({ result, agentName }: OutputViewerProps) {
   }
 
   function handleDownloadMd() {
-    downloadFile(`${baseFilename}.md`, result.markdown, 'text/markdown');
+    downloadFile(`${baseFilename}.md`, markdown, 'text/markdown');
   }
 
   function handleDownloadHtml() {
-    const html = markdownToHtmlString(result.markdown);
+    const html = markdownToHtmlString(markdown);
     const doc = renderHtmlDocument(agentName, html);
     downloadFile(`${baseFilename}.html`, doc, 'text/html');
   }
@@ -112,7 +115,7 @@ export function OutputViewer({ result, agentName }: OutputViewerProps) {
   const showPreview = mode === 'preview' || mode === 'split';
 
   return (
-    <div className="card flex h-full flex-col overflow-hidden">
+    <div className="card flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -176,10 +179,10 @@ export function OutputViewer({ result, agentName }: OutputViewerProps) {
         </div>
       </div>
 
-      <div className="grid flex-1 grid-cols-1 lg:grid-cols-2">
+      <div className={`grid flex-1 overflow-hidden ${mode === 'split' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
         {showSource ? (
           <div
-            className={`flex min-h-[400px] flex-col border-slate-200 ${
+            className={`flex min-h-0 flex-col border-slate-200 ${
               showPreview ? 'border-b lg:border-b-0 lg:border-r' : ''
             }`}
           >
@@ -187,13 +190,13 @@ export function OutputViewer({ result, agentName }: OutputViewerProps) {
               Markdown source
             </div>
             <pre className="m-0 flex-1 overflow-auto bg-slate-900 px-4 py-3 text-xs leading-5 text-slate-100">
-              <code>{result.markdown}</code>
+              <code>{markdown}</code>
             </pre>
           </div>
         ) : null}
 
         {showPreview ? (
-          <div className="flex min-h-[400px] flex-col">
+          <div className="flex min-h-0 flex-col">
             <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Rendered preview
             </div>
@@ -202,7 +205,7 @@ export function OutputViewer({ result, agentName }: OutputViewerProps) {
               className="markdown-body flex-1 overflow-auto px-5 py-4"
             >
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {result.markdown}
+                {markdown}
               </ReactMarkdown>
               {result.mermaid ? (
                 <div className="mt-4">
@@ -226,24 +229,24 @@ export function OutputViewer({ result, agentName }: OutputViewerProps) {
         </span>
         <span>
           <span className="font-semibold text-slate-600">Took:</span>{' '}
-          {result.metadata.executionMs} ms
+          {meta.executionMs} ms
         </span>
-        {result.metadata.tokensUsed !== undefined ? (
+        {meta.tokensUsed !== undefined ? (
           <span>
             <span className="font-semibold text-slate-600">Tokens:</span>{' '}
-            {result.metadata.tokensUsed}
+            {meta.tokensUsed}
           </span>
         ) : null}
-        {result.metadata.filesAnalyzed !== undefined ? (
+        {meta.filesAnalyzed !== undefined ? (
           <span>
             <span className="font-semibold text-slate-600">Files:</span>{' '}
-            {result.metadata.filesAnalyzed}
+            {meta.filesAnalyzed}
           </span>
         ) : null}
-        {result.metadata.model ? (
+        {meta.model ? (
           <span>
             <span className="font-semibold text-slate-600">Model:</span>{' '}
-            {result.metadata.model}
+            {meta.model}
           </span>
         ) : null}
       </div>

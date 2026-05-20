@@ -35,7 +35,12 @@ function validate(params: InputParam[], values: FormValues): FormErrors {
   const errs: FormErrors = {};
   for (const p of params) {
     const v = values[p.name];
-    if (p.required) {
+
+    // Conditional validation: if use_neo4j is true, neo4j_run_id becomes required
+    const isConditionallyRequired =
+      p.name === 'neo4j_run_id' && values['use_neo4j'] === true;
+
+    if (p.required || isConditionallyRequired) {
       const empty =
         v === undefined ||
         v === null ||
@@ -90,7 +95,21 @@ export function AgentForm({ agent, submitting, onSubmit }: AgentFormProps) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   function setField(name: string, value: unknown) {
-    setValues((prev) => ({ ...prev, [name]: value }));
+    setValues((prev) => {
+      const newValues = { ...prev, [name]: value };
+
+      // When use_neo4j checkbox changes, re-validate neo4j_run_id
+      if (name === 'use_neo4j') {
+        const errs = validate(agent.input_params, newValues);
+        setErrors(errs);
+        // Mark neo4j_run_id as touched if checkbox is now checked and field is empty
+        if (value === true && !newValues['neo4j_run_id']) {
+          setTouched((prev) => ({ ...prev, neo4j_run_id: true }));
+        }
+      }
+
+      return newValues;
+    });
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -117,11 +136,17 @@ export function AgentForm({ agent, submitting, onSubmit }: AgentFormProps) {
       {agent.input_params.map((param) => {
         const value = values[param.name];
         const err = touched[param.name] ? errors[param.name] : undefined;
+
+        // Check if field is conditionally required
+        const isConditionallyRequired =
+          param.name === 'neo4j_run_id' && values['use_neo4j'] === true;
+        const showRequired = param.required || isConditionallyRequired;
+
         return (
           <div key={param.name}>
             <label className="field-label" htmlFor={`field-${param.name}`}>
               {param.label ?? param.name}
-              {param.required ? (
+              {showRequired ? (
                 <span className="ml-1 text-red-500">*</span>
               ) : null}
             </label>

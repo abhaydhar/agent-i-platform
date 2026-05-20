@@ -1,11 +1,19 @@
-import { resolve } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { claudeAuthMode, env } from '../config/env';
+import { runWithAgentSdk } from './agentExecution/agentSdkRun';
+import { finalizeRun } from './agentExecution/finalizeRun';
+import { buildInitialUserMessage } from './agentExecution/runPrompt';
+import type { IterationTrace, RunRequest, RunResult } from './agentExecution/types';
+export type {
+  RunRequest,
+  RunResult,
+  IterationTrace,
+  ToolCallTrace,
+} from './agentExecution/types';
 import { MCPManager, type ToolHandler } from './MCPManager';
 import { buildMockRun } from './mockAgent';
 import { createLogger } from '../utils/logger';
 import { computeRunFsRoot } from '../utils/runFsRoot';
-import type { AgentRow } from '../models/types';
 
 const log = createLogger('executor');
 
@@ -24,52 +32,7 @@ function buildAnthropicClient(): Anthropic {
   return new Anthropic(opts);
 }
 
-export interface RunRequest {
-  agent: AgentRow;
-  sessionId: string;
-  inputs: Record<string, unknown>;
-  priorMarkdown?: string;
-  userMessage?: string;
-  /** Effective FS sandbox root for this run; set by AgentExecutor.run */
-  fsSandboxRoot?: string;
-}
-
-export interface ToolCallTrace {
-  name: string;
-  argsPreview: string;
-  ok: boolean;
-  resultPreview: string;
-  resultBytes: number;
-  ms: number;
-}
-
-export interface IterationTrace {
-  iter: number;
-  stopReason: string | null;
-  textChars: number;
-  textPreview: string;
-  toolCalls: ToolCallTrace[];
-  inputTokens: number;
-  outputTokens: number;
-  elapsedMs: number;
-}
-
-export interface RunResult {
-  markdown: string;
-  mermaid: string | null;
-  metadata: {
-    executionMs: number;
-    tokensUsed: number;
-    toolCalls: number;
-    iterations: number;
-    stopReason: string;
-    model: string;
-    mocked: boolean;
-    trace?: IterationTrace[];
-  };
-}
-
-const MAX_TOOL_RESULT_CHARS = 6_000;
+const MAX_TOOL_RESULT_CHARS = 3_000;
 const TRACE_PREVIEW_CHARS = 240;
 
 function clampToolResult(payload: unknown): string {
@@ -103,82 +66,6 @@ function summarizeArgs(args: unknown): string {
   }
 }
 
-function renderInputs(inputs: Record<string, unknown>): string {
-  return Object.entries(inputs)
-    .map(([k, v]) => `- ${k}: ${JSON.stringify(v)}`)
-    .join('\n');
-}
-
-function extractMermaid(markdown: string): string | null {
-  const m = markdown.match(/```mermaid\n([\s\S]*?)```/);
-  return m?.[1]?.trim() ?? null;
-}
-
-function authoritativeRunDateUtc(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function buildInitialUserMessage(req: RunRequest): string {
-  const dateLine = `**Authoritative run date (UTC):** ${authoritativeRunDateUtc()}`;
-  const lines: string[] = [];
-  if (req.userMessage) {
-    lines.push(req.userMessage);
-    if (req.priorMarkdown) {
-      lines.push('', 'Prior agent output (for context):', '');
-      lines.push(req.priorMarkdown);
-    }
-    lines.push('', dateLine);
-  } else {
-    lines.push(`Please run the **${req.agent.name}** agent with these inputs:`);
-    lines.push('');
-    lines.push(renderInputs(req.inputs));
-    const root = req.fsSandboxRoot
-      ? resolve(req.fsSandboxRoot)
-      : resolve(env.fsSandboxRoot);
-    if (root !== resolve(env.fsSandboxRoot)) {
-      lines.push('');
-      lines.push(
-        `**Filesystem root for tools:** \`${root}\` (all list_files / read_file paths are resolved under this directory).`
-      );
-    }
-    lines.push('');
-    lines.push(dateLine);
-    lines.push('');
-    lines.push(
-      'Produce a complete, well-structured markdown report. If the agent supports a Mermaid diagram and the inputs request one, include it in a ```mermaid fenced block.'
-    );
-  }
-  return lines.join('\n');
-}
-
-function renderTraceMarkdown(trace: IterationTrace[]): string {
-  const lines: string[] = [];
-  lines.push('');
-  lines.push('---');
-  lines.push('');
-  lines.push('<details><summary>Run trace (debug)</summary>');
-  lines.push('');
-  for (const t of trace) {
-    lines.push(
-      `**Iter ${t.iter + 1}** · stop=\`${t.stopReason ?? '?'}\` · ${t.elapsedMs} ms · in=${t.inputTokens} out=${t.outputTokens} · text=${t.textChars} chars · tools=${t.toolCalls.length}`
-    );
-    if (t.textPreview) {
-      lines.push(`> ${t.textPreview}`);
-    }
-    for (const tc of t.toolCalls) {
-      lines.push(
-        `- \`${tc.name}\` ${tc.ok ? 'OK' : 'FAIL'} · ${tc.ms} ms · ${tc.resultBytes} B · args=${tc.argsPreview}`
-      );
-      if (!tc.ok || tc.resultBytes < 200) {
-        lines.push(`  - ${preview(tc.resultPreview, 200)}`);
-      }
-    }
-    lines.push('');
-  }
-  lines.push('</details>');
-  return lines.join('\n');
-}
-
 interface AnthropicMessage {
   role: 'user' | 'assistant';
   content: AnthropicContent[];
@@ -202,7 +89,7 @@ interface AnthropicBlock {
   input?: unknown;
 }
 
-async function runWithClaude(
+async function runWithMessagesApi(
   req: RunRequest,
   tools: ToolHandler[]
 ): Promise<RunResult> {
@@ -222,7 +109,7 @@ async function runWithClaude(
 
   const toolDefs = tools.map((t) => t.def);
   log.info(
-    `start agent="${req.agent.name}" session=${req.sessionId} skills=[${req.agent.skills.join(',')}] tools=[${toolDefs.map((t) => t.name).join(',') || 'none'}] maxIter=${env.maxAgentIterations}`
+    `start agent="${req.agent.name}" session=${req.sessionId} skills=[${req.agent.skills.join(',')}] tools=[${toolDefs.map((t) => t.name).join(',') || 'none'}] maxIter=${env.maxAgentIterations} backend=messages`
   );
 
   for (let iter = 0; iter < env.maxAgentIterations; iter++) {
@@ -288,7 +175,7 @@ async function runWithClaude(
     if (response.stop_reason !== 'tool_use') {
       iterTrace.elapsedMs = Date.now() - iterStart;
       trace.push(iterTrace);
-      return finalize({
+      return finalizeRun({
         finalText: iterText,
         trace,
         totalTokens,
@@ -296,13 +183,16 @@ async function runWithClaude(
         stopReason: lastStopReason,
         iterations: iter + 1,
         t0,
+        executorBackend: 'messages',
       });
     }
 
-    const toolResults: AnthropicContent[] = [];
-    for (const block of assistantContent) {
-      if (block.type !== 'tool_use') continue;
-      totalToolCalls++;
+    const toolUseBlocks = assistantContent.filter((b) => b.type === 'tool_use');
+    totalToolCalls += toolUseBlocks.length;
+
+    log.info(`  executing ${toolUseBlocks.length} tools in parallel...`);
+
+    const toolPromises = toolUseBlocks.map(async (block) => {
       const tcStart = Date.now();
       const argsPreview = summarizeArgs(block.input);
       log.info(`  tool_use → ${block.name} args=${argsPreview}`);
@@ -316,35 +206,45 @@ async function runWithClaude(
       const tcMs = Date.now() - tcStart;
       let resultStr: string;
       let resultBytes: number;
+      let toolResult: AnthropicContent;
+
       if (res.ok) {
         resultStr = clampToolResult(res.data);
         resultBytes = resultStr.length;
         log.info(`    tool ok ${block.name} ${tcMs}ms ${resultBytes}B`);
-        toolResults.push({
+        toolResult = {
           type: 'tool_result',
           tool_use_id: block.id,
           content: resultStr,
-        });
+        };
       } else {
         resultStr = `Error: ${res.error}`;
         resultBytes = resultStr.length;
         log.warn(`    tool FAIL ${block.name} ${tcMs}ms — ${res.error}`);
-        toolResults.push({
+        toolResult = {
           type: 'tool_result',
           tool_use_id: block.id,
           content: resultStr,
           is_error: true,
-        });
+        };
       }
-      iterTrace.toolCalls.push({
-        name: block.name,
-        argsPreview,
-        ok: res.ok,
-        resultPreview: preview(resultStr),
-        resultBytes,
-        ms: tcMs,
-      });
-    }
+
+      return {
+        toolResult,
+        trace: {
+          name: block.name,
+          argsPreview,
+          ok: res.ok,
+          resultPreview: preview(resultStr),
+          resultBytes,
+          ms: tcMs,
+        },
+      };
+    });
+
+    const toolExecutions = await Promise.all(toolPromises);
+    const toolResults: AnthropicContent[] = toolExecutions.map((e) => e.toolResult);
+    toolExecutions.forEach((e) => iterTrace.toolCalls.push(e.trace));
 
     iterTrace.elapsedMs = Date.now() - iterStart;
     trace.push(iterTrace);
@@ -400,7 +300,7 @@ async function runWithClaude(
     log.error('force-conclude turn failed', err);
   }
 
-  return finalize({
+  return finalizeRun({
     finalText:
       forceConcludeText ||
       '_Agent exited without producing any text. Check the run trace below to see which tools were called and what they returned._',
@@ -410,52 +310,29 @@ async function runWithClaude(
     stopReason: lastStopReason || 'max_iterations',
     iterations: env.maxAgentIterations + 1,
     t0,
+    executorBackend: 'messages',
   });
-}
-
-function finalize(params: {
-  finalText: string;
-  trace: IterationTrace[];
-  totalTokens: number;
-  totalToolCalls: number;
-  stopReason: string;
-  iterations: number;
-  t0: number;
-}): RunResult {
-  const incomplete =
-    params.stopReason !== 'end_turn' && params.stopReason !== 'stop_sequence';
-  const hadAnyToolFailure = params.trace.some((t) =>
-    t.toolCalls.some((c) => !c.ok)
-  );
-  const showTrace = incomplete || hadAnyToolFailure;
-
-  const markdown = showTrace
-    ? params.finalText + renderTraceMarkdown(params.trace)
-    : params.finalText;
-
-  log.info(
-    `done iters=${params.iterations} stop=${params.stopReason} text=${params.finalText.length}ch tools=${params.totalToolCalls} tokens=${params.totalTokens} elapsed=${Date.now() - params.t0}ms`
-  );
-
-  return {
-    markdown,
-    mermaid: extractMermaid(params.finalText),
-    metadata: {
-      executionMs: Date.now() - params.t0,
-      tokensUsed: params.totalTokens,
-      toolCalls: params.totalToolCalls,
-      iterations: params.iterations,
-      stopReason: params.stopReason,
-      model: env.anthropicModel,
-      mocked: false,
-      trace: params.trace,
-    },
-  };
 }
 
 export const AgentExecutor = {
   async run(req: RunRequest): Promise<RunResult> {
-    const tools = MCPManager.toolsForSkills(req.agent.skills);
+    const useAgentSdk =
+      (env.agentExecutorBackend ?? 'messages').toLowerCase() === 'agent-sdk';
+    const includeCodeParserTools = env.enableCodeParserTools;
+    const skills = [...req.agent.skills];
+    const tools = MCPManager.toolsForSkills(skills, {
+      includeCodeParserTools,
+    });
+
+    const wantsFsSkill =
+      skills.includes('data-lineage') ||
+      skills.includes('code-analysis') ||
+      skills.includes('filesystem');
+    if (!useAgentSdk && !env.useMcpFilesystemTools && wantsFsSkill) {
+      log.warn(
+        'USE_MCP_FILESYSTEM_TOOLS=false: Messages API has no MCP list_files/read_file. Set AGENT_EXECUTOR_BACKEND=agent-sdk for built-in Read/Glob/Grep, or set USE_MCP_FILESYSTEM_TOOLS=true for legacy MCP file tools.'
+      );
+    }
 
     let fsSandboxRoot: string;
     try {
@@ -505,7 +382,12 @@ export const AgentExecutor = {
     }
 
     try {
-      return await runWithClaude(runReq, tools);
+      if (useAgentSdk) {
+        return await runWithAgentSdk(runReq, tools, {
+          useNeo4j: Boolean(runReq.inputs.use_neo4j),
+        });
+      }
+      return await runWithMessagesApi(runReq, tools);
     } catch (err) {
       log.error('claude call failed', err);
       const t0 = Date.now();

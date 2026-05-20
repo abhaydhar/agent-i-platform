@@ -7,7 +7,7 @@ capability: Multi-stack data lineage tracing
 skills:
   - name: data-lineage
     version: 1.1.0
-  - name: code-analysis
+  - name: code-ast-parse
     version: 1.0.0
 mcps:
   - name: filesystem

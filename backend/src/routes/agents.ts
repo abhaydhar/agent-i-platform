@@ -1,12 +1,76 @@
 import { Router } from 'express';
 
+import { env } from '../config/env';
 import { AgentModel } from '../models/Agent';
+import type { AgentRow } from '../models/types';
 import { SessionModel } from '../models/Session';
 import { OutputModel } from '../models/Output';
 import { AgentExecutor } from '../services/AgentExecutor';
 import { asyncHandler, HttpError } from '../utils/http';
+import { progressEmitter } from '../services/agentExecution/progressEmitter';
+import { createLogger } from '../utils/logger';
 
 export const agentsRouter = Router();
+
+const runLog = createLogger('agents-run');
+
+/**
+ * Runs the agent after HTTP returns `{ sessionId, pending: true }` so the client can open
+ * SSE on GET /sessions/:sessionId/stream before work finishes.
+ */
+async function executeAgentJob(
+  sessionId: string,
+  agent: AgentRow,
+  inputs: Record<string, unknown>
+): Promise<void> {
+  try {
+    progressEmitter.emit(sessionId, {
+      type: 'started',
+      sessionId,
+      timestamp: Date.now(),
+      agentName: agent.name,
+      maxIterations: env.maxAgentIterations,
+    });
+
+    const result = await AgentExecutor.run({
+      agent,
+      sessionId,
+      inputs,
+    });
+
+    await OutputModel.create({
+      session_id: sessionId,
+      markdown_content: result.markdown,
+      mermaid_content: result.mermaid,
+      metadata: result.metadata as unknown as Record<string, unknown>,
+    });
+
+    const backend = result.metadata?.executorBackend;
+    if (backend !== 'agent-sdk') {
+      progressEmitter.emit(sessionId, {
+        type: 'completed',
+        sessionId,
+        timestamp: Date.now(),
+        markdown: result.markdown,
+        mermaid: result.mermaid,
+        iterations: result.metadata.iterations,
+        totalTokens: result.metadata.tokensUsed,
+        totalToolCalls: result.metadata.toolCalls,
+        executionMs: result.metadata.executionMs,
+      });
+      progressEmitter.complete(sessionId);
+    }
+  } catch (err) {
+    runLog.error('async agent run failed', err);
+    progressEmitter.emit(sessionId, {
+      type: 'error',
+      sessionId,
+      timestamp: Date.now(),
+      error: err instanceof Error ? err.message : String(err),
+    });
+    progressEmitter.complete(sessionId);
+  }
+}
 
 function parseId(raw: string): number {
   const n = Number(raw);
@@ -93,24 +157,35 @@ agentsRouter.post(
     }
 
     const session = await SessionModel.create({ agentId: agent.id, inputs });
-    const result = await AgentExecutor.run({
-      agent,
-      sessionId: session.id,
-      inputs,
-    });
 
-    await OutputModel.create({
-      session_id: session.id,
-      markdown_content: result.markdown,
-      mermaid_content: result.mermaid,
-      metadata: result.metadata as unknown as Record<string, unknown>,
-    });
+    void executeAgentJob(session.id, agent, inputs);
 
     res.json({
       sessionId: session.id,
-      markdown: result.markdown,
-      mermaid: result.mermaid ?? undefined,
-      metadata: result.metadata,
+      pending: true,
     });
   })
+);
+agentsRouter.get(
+  '/sessions/:sessionId/stream',
+  (req, res) => {
+    const sessionId = req.params.sessionId;
+
+    // Register SSE client
+    progressEmitter.registerSSEClient(sessionId, res);
+
+    // Keep-alive ping every 30 seconds
+    const keepAlive = setInterval(() => {
+      try {
+        res.write(': keepalive\n\n');
+      } catch {
+        clearInterval(keepAlive);
+      }
+    }, 30000);
+
+    // Cleanup on close
+    res.on('close', () => {
+      clearInterval(keepAlive);
+    });
+  }
 );

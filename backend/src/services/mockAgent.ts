@@ -1,4 +1,4 @@
-import type { RunRequest } from './AgentExecutor';
+import type { RunRequest } from './agentExecution/types';
 import { FilesystemMCP } from './mcps/filesystem';
 
 interface MockResult {
