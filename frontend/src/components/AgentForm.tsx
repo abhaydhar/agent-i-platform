@@ -72,7 +72,12 @@ function normalizeForSubmit(
   for (const p of params) {
     let v = values[p.name];
     if (p.type === 'number') {
-      v = v === '' || v === null || v === undefined ? undefined : Number(v);
+      // Convert to number if valid, skip if empty
+      if (v === '' || v === null || v === undefined) {
+        // Don't add undefined values - they'll be stripped by JSON.stringify anyway
+        continue;
+      }
+      v = Number(v);
     } else if (p.type === 'paths') {
       const raw = String(v ?? '');
       v = raw
@@ -118,11 +123,37 @@ export function AgentForm({ agent, submitting, onSubmit }: AgentFormProps) {
     agent.input_params.forEach((p) => (allTouched[p.name] = true));
     setTouched(allTouched);
 
+    // Validate with current form values
     const errs = validate(agent.input_params, values);
     setErrors(errs);
-    if (Object.keys(errs).length > 0) return;
 
-    onSubmit(normalizeForSubmit(agent.input_params, values));
+    // Additional defensive check for Neo4j conditional requirement
+    if (values['use_neo4j'] === true) {
+      const runId = values['neo4j_run_id'];
+      if (!runId || runId === '' || runId === null || runId === undefined) {
+        if (!errs['neo4j_run_id']) {
+          errs['neo4j_run_id'] = 'Neo4j Run ID is required when Neo4j is enabled';
+          setErrors(errs);
+        }
+      }
+    }
+
+    if (Object.keys(errs).length > 0) {
+      console.warn('Form validation failed:', errs);
+      return;
+    }
+
+    const normalized = normalizeForSubmit(agent.input_params, values);
+
+    // Final safety check before submission
+    if (normalized['use_neo4j'] === true && !normalized['neo4j_run_id']) {
+      console.error('Critical: Neo4j enabled but run_id is missing after normalization');
+      setErrors({ neo4j_run_id: 'Neo4j Run ID is required' });
+      return;
+    }
+
+    console.log('Submitting form with values:', normalized);
+    onSubmit(normalized);
   }
 
   function handleReset() {

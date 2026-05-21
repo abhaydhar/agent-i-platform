@@ -142,6 +142,10 @@ agentsRouter.post(
 
     const inputs = (req.body?.inputs as Record<string, unknown>) ?? {};
 
+    // Log inputs for debugging intermittent issues
+    runLog.info(`agent run inputs for ${agent.name}:`, JSON.stringify(inputs));
+
+    // Validate required fields
     for (const p of agent.input_params) {
       if (p.required) {
         const v = inputs[p.name];
@@ -153,6 +157,18 @@ agentsRouter.post(
         if (empty) {
           throw new HttpError(400, `Missing required input '${p.name}'`);
         }
+      }
+    }
+
+    // Conditional validation: if use_neo4j is true, neo4j_run_id is required
+    if (inputs.use_neo4j === true) {
+      const runId = inputs.neo4j_run_id;
+      if (runId === undefined || runId === null || runId === '') {
+        runLog.warn(`Neo4j enabled but neo4j_run_id is missing. Inputs: ${JSON.stringify(inputs)}`);
+        throw new HttpError(400, 'Neo4j Run ID is required when "Use Neo4j" is enabled');
+      }
+      if (typeof runId !== 'number' || !Number.isInteger(runId) || runId <= 0) {
+        throw new HttpError(400, 'Neo4j Run ID must be a positive integer');
       }
     }
 

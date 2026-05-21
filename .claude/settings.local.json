@@ -17,7 +17,8 @@
       "Bash(npm view @anthropic-ai/claude-agent-sdk versions --json)",
       "Bash(npm install @anthropic-ai/claude-agent-sdk --legacy-peer-deps)",
       "Bash(test -d node_modules)",
-      "Bash(cat dataFlowExplorer.ts.backup)"
+      "Bash(cat dataFlowExplorer.ts.backup)",
+      "Bash(npm run seed)"
     ],
     "deny": [],
     "ask": []
