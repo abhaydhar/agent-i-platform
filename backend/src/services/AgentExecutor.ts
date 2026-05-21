@@ -197,10 +197,19 @@ async function runWithMessagesApi(
       const argsPreview = summarizeArgs(block.input);
       log.info(`  tool_use → ${block.name} args=${argsPreview}`);
 
+      // Extract neo4j_run_id from inputs for auto-injection into Neo4j tools
+      const neo4jRunId = typeof req.inputs.neo4j_run_id === 'number'
+        ? req.inputs.neo4j_run_id
+        : undefined;
+
       const res = await MCPManager.runTool(
         block.name,
         (block.input as Record<string, unknown>) ?? {},
-        { sessionId: req.sessionId, fsSandboxRoot: req.fsSandboxRoot }
+        {
+          sessionId: req.sessionId,
+          fsSandboxRoot: req.fsSandboxRoot,
+          neo4jRunId
+        }
       );
 
       const tcMs = Date.now() - tcStart;

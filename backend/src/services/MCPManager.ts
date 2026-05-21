@@ -19,6 +19,8 @@ export interface ToolCallContext {
   sessionId?: string;
   /** Resolved repository root for filesystem tools for this agent run. */
   fsSandboxRoot?: string;
+  /** Neo4j run_id from agent inputs, auto-injected for Neo4j tools. */
+  neo4jRunId?: number;
 }
 
 export type ToolResult =
@@ -204,19 +206,19 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
         properties: {
           run_id: {
             type: 'number',
-            description: 'Optional: Get stats for specific run_id',
+            description: 'Optional: Get stats for specific run_id. If not provided, will use neo4j_run_id from agent inputs.',
           },
         },
       },
     },
-    async run(args) {
+    async run(args, ctx) {
       try {
         if (!(await Neo4jMCP.isConfigured())) {
           return fail('Neo4j is not configured');
         }
-        const stats = await Neo4jComprehensiveMCP.getStats(
-          args.run_id as number | undefined
-        );
+        // Use run_id from args, or fallback to neo4jRunId from context
+        const runId = (args.run_id as number | undefined) ?? ctx.neo4jRunId;
+        const stats = await Neo4jComprehensiveMCP.getStats(runId);
         return ok(stats);
       } catch (err) {
         return fail(err);
@@ -238,7 +240,7 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
           },
           run_id: {
             type: 'number',
-            description: 'Version/parse run identifier (required - get from neo4j_get_stats)',
+            description: 'Version/parse run identifier. If not provided, will use neo4j_run_id from agent inputs.',
           },
           operation_type: {
             type: 'string',
@@ -250,17 +252,22 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
             description: 'Max results (default 100)',
           },
         },
-        required: ['field_name', 'run_id'],
+        required: ['field_name'],
       },
     },
-    async run(args) {
+    async run(args, ctx) {
       try {
         if (!(await Neo4jMCP.isConfigured())) {
           return fail('Neo4j is not configured');
         }
+        // Use run_id from args, or fallback to neo4jRunId from context
+        const runId = (args.run_id as number | undefined) ?? ctx.neo4jRunId;
+        if (!runId) {
+          return fail('run_id is required but was not provided in arguments or agent inputs');
+        }
         const lineage = await Neo4jComprehensiveMCP.findFieldLineage(
           args.field_name as string,
-          args.run_id as number,
+          runId,
           args.operation_type as string | undefined,
           args.limit as number | undefined
         );
@@ -299,17 +306,21 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
             description: 'Max results',
           },
         },
-        required: ['variable_term', 'run_id'],
+        required: ['variable_term'],
       },
     },
-    async run(args) {
+    async run(args, ctx) {
       try {
         if (!(await Neo4jMCP.isConfigured())) {
           return fail('Neo4j is not configured');
         }
+        const runId = (args.run_id as number | undefined) ?? ctx.neo4jRunId;
+        if (!runId) {
+          return fail('run_id is required but was not provided in arguments or agent inputs');
+        }
         const lineage = await Neo4jComprehensiveMCP.getVariableLineage(
           args.variable_term as string,
-          args.run_id as number,
+          runId,
           (args.direction as 'forward' | 'backward' | 'both') || 'both',
           args.limit as number | undefined
         );
@@ -353,17 +364,21 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
             description: 'Max results',
           },
         },
-        required: ['snippet_key', 'run_id'],
+        required: ['snippet_key'],
       },
     },
-    async run(args) {
+    async run(args, ctx) {
       try {
         if (!(await Neo4jMCP.isConfigured())) {
           return fail('Neo4j is not configured');
         }
+        const runId = (args.run_id as number | undefined) ?? ctx.neo4jRunId;
+        if (!runId) {
+          return fail('run_id is required but was not provided in arguments or agent inputs');
+        }
         const chains = await Neo4jComprehensiveMCP.traceCallChain(
           args.snippet_key as string,
-          args.run_id as number,
+          runId,
           args.max_depth as number | undefined,
           (args.direction as 'outgoing' | 'incoming' | 'both') || 'outgoing',
           args.limit as number | undefined
@@ -392,17 +407,21 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
             description: 'Version/parse run identifier',
           },
         },
-        required: ['snippet_key', 'run_id'],
+        required: ['snippet_key'],
       },
     },
-    async run(args) {
+    async run(args, ctx) {
       try {
         if (!(await Neo4jMCP.isConfigured())) {
           return fail('Neo4j is not configured');
         }
+        const runId = (args.run_id as number | undefined) ?? ctx.neo4jRunId;
+        if (!runId) {
+          return fail('run_id is required but was not provided in arguments or agent inputs');
+        }
         const dbCalls = await Neo4jComprehensiveMCP.getDbCalls(
           args.snippet_key as string,
-          args.run_id as number
+          runId
         );
         return ok(dbCalls);
       } catch (err) {
@@ -442,16 +461,20 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
             description: 'Max results',
           },
         },
-        required: ['run_id'],
+        required: [],
       },
     },
-    async run(args) {
+    async run(args, ctx) {
       try {
         if (!(await Neo4jMCP.isConfigured())) {
           return fail('Neo4j is not configured');
         }
+        const runId = (args.run_id as number | undefined) ?? ctx.neo4jRunId;
+        if (!runId) {
+          return fail('run_id is required but was not provided in arguments or agent inputs');
+        }
         const snippets = await Neo4jComprehensiveMCP.searchSnippets(
-          args.run_id as number,
+          runId,
           args.file_path_pattern as string | undefined,
           args.name_pattern as string | undefined,
           args.snippet_type as 'ROOT' | 'REGULAR' | undefined,
@@ -481,17 +504,21 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
             description: 'Version/parse run identifier',
           },
         },
-        required: ['snippet_key', 'run_id'],
+        required: ['snippet_key'],
       },
     },
-    async run(args) {
+    async run(args, ctx) {
       try {
         if (!(await Neo4jMCP.isConfigured())) {
           return fail('Neo4j is not configured');
         }
+        const runId = (args.run_id as number | undefined) ?? ctx.neo4jRunId;
+        if (!runId) {
+          return fail('run_id is required but was not provided in arguments or agent inputs');
+        }
         const location = await Neo4jComprehensiveMCP.getSnippetLocation(
           args.snippet_key as string,
-          args.run_id as number
+          runId
         );
         return ok(location);
       } catch (err) {
@@ -510,7 +537,7 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
         properties: {
           run_id: {
             type: 'number',
-            description: 'Version/parse run identifier',
+            description: 'Version/parse run identifier. If not provided, will use neo4j_run_id from agent inputs.',
           },
           limit: {
             type: 'number',
@@ -518,16 +545,20 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
             description: 'Max flows to return',
           },
         },
-        required: ['run_id'],
+        required: [],
       },
     },
-    async run(args) {
+    async run(args, ctx) {
       try {
         if (!(await Neo4jMCP.isConfigured())) {
           return fail('Neo4j is not configured');
         }
+        const runId = (args.run_id as number | undefined) ?? ctx.neo4jRunId;
+        if (!runId) {
+          return fail('run_id is required but was not provided in arguments or agent inputs');
+        }
         const flows = await Neo4jComprehensiveMCP.listExecutionFlows(
-          args.run_id as number,
+          runId,
           args.limit as number | undefined
         );
         return ok(flows);
@@ -564,17 +595,21 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
             description: 'Max results',
           },
         },
-        required: ['flow_key', 'run_id'],
+        required: ['flow_key'],
       },
     },
-    async run(args) {
+    async run(args, ctx) {
       try {
         if (!(await Neo4jMCP.isConfigured())) {
           return fail('Neo4j is not configured');
         }
+        const runId = (args.run_id as number | undefined) ?? ctx.neo4jRunId;
+        if (!runId) {
+          return fail('run_id is required but was not provided in arguments or agent inputs');
+        }
         const subgraph = await Neo4jComprehensiveMCP.getExecutionFlowSubgraph(
           args.flow_key as string,
-          args.run_id as number,
+          runId,
           args.max_depth as number | undefined,
           args.limit as number | undefined
         );
@@ -595,7 +630,7 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
         properties: {
           run_id: {
             type: 'number',
-            description: 'Version/parse run identifier',
+            description: 'Version/parse run identifier. If not provided, will use neo4j_run_id from agent inputs.',
           },
           min_snippets: {
             type: 'number',
@@ -608,16 +643,20 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
             description: 'Max entities to return',
           },
         },
-        required: ['run_id'],
+        required: [],
       },
     },
-    async run(args) {
+    async run(args, ctx) {
       try {
         if (!(await Neo4jMCP.isConfigured())) {
           return fail('Neo4j is not configured');
         }
+        const runId = (args.run_id as number | undefined) ?? ctx.neo4jRunId;
+        if (!runId) {
+          return fail('run_id is required but was not provided in arguments or agent inputs');
+        }
         const usage = await Neo4jComprehensiveMCP.getEntityUsageSpread(
-          args.run_id as number,
+          runId,
           args.min_snippets as number | undefined,
           args.limit as number | undefined
         );

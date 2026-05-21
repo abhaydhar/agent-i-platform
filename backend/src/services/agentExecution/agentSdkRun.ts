@@ -170,9 +170,16 @@ export async function runWithAgentSdk(
 ): Promise<RunResult> {
   const t0 = Date.now();
   const sessionId = req.sessionId;
+
+  // Extract neo4j_run_id from inputs for auto-injection into Neo4j tools
+  const neo4jRunId = typeof req.inputs.neo4j_run_id === 'number'
+    ? req.inputs.neo4j_run_id
+    : undefined;
+
   const toolCtx = {
     sessionId: req.sessionId,
     fsSandboxRoot: req.fsSandboxRoot,
+    neo4jRunId,
   };
   const toolStats = { toolCalls: 0 };
   const hasMcp = handlers.length > 0;
